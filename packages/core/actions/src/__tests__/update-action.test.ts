@@ -1,3 +1,12 @@
+/**
+ * This file is part of the NocoBase (R) project.
+ * Copyright (c) 2020-2024 NocoBase Co., Ltd.
+ * Authors: NocoBase Team.
+ *
+ * This project is dual-licensed under AGPL-3.0 and NocoBase Commercial License.
+ * For more information, please refer to: https://www.nocobase.com/agreement.
+ */
+
 import { MockServer, mockServer } from './index';
 import { registerActions } from '@nocobase/actions';
 
@@ -104,6 +113,7 @@ describe('update action', () => {
           content: 'c0',
         },
       });
+    expect(response.statusCode).toEqual(200);
 
     await c1.reload();
     expect(c1.get('content')).toEqual('c0');

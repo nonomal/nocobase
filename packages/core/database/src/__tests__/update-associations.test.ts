@@ -1,17 +1,216 @@
+/**
+ * This file is part of the NocoBase (R) project.
+ * Copyright (c) 2020-2024 NocoBase Co., Ltd.
+ * Authors: NocoBase Team.
+ *
+ * This project is dual-licensed under AGPL-3.0 and NocoBase Commercial License.
+ * For more information, please refer to: https://www.nocobase.com/agreement.
+ */
+
 import { Collection } from '../collection';
 import { Database } from '../database';
-import { updateAssociation, updateAssociations } from '../update-associations';
+import { updateAssociations } from '../update-associations';
 import { mockDatabase } from './';
 
 describe('update associations', () => {
   describe('belongsTo', () => {
     let db: Database;
     beforeEach(async () => {
-      db = mockDatabase();
+      db = mockDatabase({});
+      await db.clean({
+        drop: true,
+      });
     });
 
     afterEach(async () => {
       await db.close();
+    });
+
+    it('should update has one association with foreign key', async () => {
+      const User = db.collection({
+        name: 'users',
+        fields: [
+          { type: 'string', name: 'name' },
+          { type: 'hasOne', name: 'profile', foreignKey: 'userId', target: 'profiles' },
+        ],
+      });
+
+      const Profile = db.collection({
+        name: 'profiles',
+        fields: [
+          { type: 'string', name: 'name' },
+          { type: 'bigInt', name: 'userId' },
+          { type: 'belongsTo', name: 'user', foreignKey: 'userId' },
+        ],
+      });
+
+      await db.sync();
+
+      // create user
+      const user = await User.repository.create({ values: { name: 'user1' } });
+      const profile = await Profile.repository.create({ values: { name: 'profile1' } });
+
+      const profileData = profile.toJSON();
+      await User.repository.update({
+        filterByTk: user.id,
+        values: {
+          profile: {
+            ...profileData,
+            userId: null,
+          },
+        },
+        updateAssociationValues: ['profile'],
+      });
+
+      const profile1 = await Profile.repository.findOne({ filterByTk: profile.id });
+      expect(profile1['userId']).toBe(user.id);
+    });
+
+    it('should update has many association with foreign key', async () => {
+      const User = db.collection({
+        name: 'users',
+        fields: [
+          { type: 'string', name: 'name' },
+          { type: 'hasMany', name: 'profiles', foreignKey: 'userId', target: 'profiles' },
+        ],
+      });
+
+      const Profile = db.collection({
+        name: 'profiles',
+        fields: [
+          { type: 'string', name: 'name' },
+          { type: 'bigInt', name: 'userId' },
+          { type: 'belongsTo', name: 'user', foreignKey: 'userId' },
+        ],
+      });
+
+      await db.sync();
+
+      // create user
+      const user = await User.repository.create({ values: { name: 'user1' } });
+      const profile = await Profile.repository.create({ values: { name: 'profile1' } });
+
+      const profileData = profile.toJSON();
+      await User.repository.update({
+        filterByTk: user.id,
+        values: {
+          profiles: [
+            {
+              ...profileData,
+              userId: null,
+            },
+          ],
+        },
+        updateAssociationValues: ['profiles'],
+      });
+
+      const profile1 = await Profile.repository.findOne({ filterByTk: profile.id });
+      expect(profile1['userId']).toBe(user.id);
+    });
+
+    test('update belongs to with foreign key and object', async () => {
+      const throughAB = db.collection({
+        name: 'throughAB',
+        fields: [
+          {
+            type: 'belongsTo',
+            name: 'b',
+            foreignKey: 'bId',
+            target: 'B',
+          },
+        ],
+      });
+
+      const throughBC = db.collection({
+        name: 'throughBC',
+        fields: [
+          {
+            type: 'belongsTo',
+            name: 'c',
+            foreignKey: 'cId',
+            target: 'C',
+          },
+        ],
+      });
+
+      const throughCD = db.collection({
+        name: 'throughCD',
+        fields: [
+          {
+            type: 'belongsTo',
+            name: 'd',
+            foreignKey: 'dId',
+            target: 'D',
+          },
+        ],
+      });
+
+      const A = db.collection({
+        name: 'A',
+        fields: [
+          { type: 'string', name: 'name' },
+          { type: 'hasMany', name: 'throughAB', foreignKey: 'aId', target: 'throughAB' },
+        ],
+      });
+
+      const B = db.collection({
+        name: 'B',
+        fields: [
+          { type: 'string', name: 'name' },
+          { type: 'hasMany', name: 'throughBC', foreignKey: 'bId', target: 'throughBC' },
+        ],
+      });
+
+      const C = db.collection({
+        name: 'C',
+        fields: [
+          { type: 'string', name: 'name' },
+          {
+            type: 'hasMany',
+            name: 'throughCD',
+            foreignKey: 'cId',
+            target: 'throughCD',
+          },
+        ],
+      });
+
+      const D = db.collection({
+        name: 'D',
+        fields: [{ type: 'string', name: 'name' }],
+      });
+
+      await db.sync();
+
+      const a1 = await A.repository.create({
+        values: {
+          name: 'a1',
+          throughAB: [
+            {
+              b: {
+                name: 'b1',
+                throughBC: [
+                  {
+                    c: {
+                      name: 'c1',
+                      throughCD: [
+                        {
+                          d: {
+                            name: 'd1',
+                          },
+                        },
+                      ],
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      });
+
+      expect(
+        a1.get('throughAB')[0].get('b').get('throughBC')[0].get('c').get('throughCD')[0].get('d').get('name'),
+      ).toBe('d1');
     });
 
     it('post.user', async () => {
@@ -83,7 +282,12 @@ describe('update associations', () => {
         },
       });
 
-      expect(post4.toJSON()).toMatchObject({
+      const p4 = await db.getRepository('posts').findOne({
+        filterByTk: post4.id,
+        appends: ['user'],
+      });
+
+      expect(p4?.toJSON()).toMatchObject({
         id: 4,
         name: 'post4',
         userId: 1,
@@ -101,6 +305,7 @@ describe('update associations', () => {
     let Post: Collection;
     beforeEach(async () => {
       db = mockDatabase();
+      await db.clean({ drop: true });
       User = db.collection({
         name: 'users',
         fields: [
@@ -117,7 +322,31 @@ describe('update associations', () => {
     afterEach(async () => {
       await db.close();
     });
+
+    it('should update association values', async () => {
+      const user1 = await User.repository.create({
+        values: {
+          name: 'u1',
+          posts: [{ name: 'u1t1' }],
+        },
+      });
+
+      // update with associations
+      const updateRes = await User.repository.update({
+        filterByTk: user1.get('id'),
+        values: {
+          name: 'u1',
+          posts: [{ id: user1.get('posts')[0].get('id'), name: 'u1t1' }],
+        },
+        updateAssociationValues: ['comments'],
+      });
+
+      expect(updateRes[0].toJSON()['posts'].length).toBe(1);
+    });
+
     it('user.posts', async () => {
+      await User.model.create<any>({ name: 'user01' });
+      await User.model.create<any>({ name: 'user02' });
       const user1 = await User.model.create<any>({ name: 'user1' });
       await updateAssociations(user1, {
         posts: {
@@ -173,7 +402,7 @@ describe('update associations', () => {
       await updateAssociations(user1, {
         posts: post1,
       });
-      console.log(JSON.stringify(user1, null, 2));
+
       expect(user1.toJSON()).toMatchObject({
         name: 'user1',
       });
@@ -191,7 +420,7 @@ describe('update associations', () => {
           name: 'post111',
         },
       });
-      console.log(JSON.stringify(user1, null, 2));
+
       expect(user1.toJSON()).toMatchObject({
         name: 'user1',
       });
@@ -216,7 +445,7 @@ describe('update associations', () => {
           post3,
         ],
       });
-      console.log(JSON.stringify(user1, null, 2));
+
       expect(user1.toJSON()).toMatchObject({
         name: 'user1',
       });
@@ -246,6 +475,7 @@ describe('update associations', () => {
 
     beforeEach(async () => {
       db = mockDatabase();
+      await db.clean({ drop: true });
       User = db.collection({
         name: 'users',
         fields: [
@@ -356,13 +586,14 @@ describe('update associations', () => {
   });
 
   describe('belongsToMany', () => {
-    let db;
-    let Post;
-    let Tag;
-    let PostTag;
+    let db: Database;
+    let Post: Collection;
+    let Tag: Collection;
+    let PostTag: Collection;
 
     beforeEach(async () => {
       db = mockDatabase();
+      await db.clean({ drop: true });
       PostTag = db.collection({
         name: 'posts_tags',
         fields: [{ type: 'string', name: 'tagged_at' }],
@@ -404,9 +635,12 @@ describe('update associations', () => {
           ],
         },
       });
-
-      const t1 = (await p1.getTags())[0];
-      expect(t1.posts_tags.tagged_at).toEqual('123');
+      const count = await PostTag.repository.count({
+        filter: {
+          tagged_at: '123',
+        },
+      });
+      expect(count).toEqual(1);
     });
   });
 });

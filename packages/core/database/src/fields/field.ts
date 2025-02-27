@@ -1,7 +1,18 @@
+/**
+ * This file is part of the NocoBase (R) project.
+ * Copyright (c) 2020-2024 NocoBase Co., Ltd.
+ * Authors: NocoBase Team.
+ *
+ * This project is dual-licensed under AGPL-3.0 and NocoBase Commercial License.
+ * For more information, please refer to: https://www.nocobase.com/agreement.
+ */
+
 import _ from 'lodash';
-import { DataType, ModelAttributeColumnOptions, ModelIndexesOptions, SyncOptions } from 'sequelize';
+import { DataType, ModelAttributeColumnOptions, ModelIndexesOptions, SyncOptions, Transactionable } from 'sequelize';
 import { Collection } from '../collection';
 import { Database } from '../database';
+import { ModelEventTypes } from '../types';
+import { snakeCase } from '../utils';
 
 export interface FieldContext {
   database: Database;
@@ -11,6 +22,8 @@ export interface FieldContext {
 export interface BaseFieldOptions {
   name?: string;
   hidden?: boolean;
+  translation?: boolean;
+
   [key: string]: any;
 }
 
@@ -24,7 +37,16 @@ export abstract class Field {
   context: FieldContext;
   database: Database;
   collection: Collection;
+
   [key: string]: any;
+
+  constructor(options?: any, context?: FieldContext) {
+    this.context = context as any;
+    this.database = this.context.database;
+    this.collection = this.context.collection;
+    this.options = options || {};
+    this.init();
+  }
 
   get name() {
     return this.options.name;
@@ -34,19 +56,12 @@ export abstract class Field {
     return this.options.type;
   }
 
-  get dataType() {
-    return this.options.dataType;
+  abstract get dataType(): any;
+
+  isRelationField() {
+    return false;
   }
 
-  constructor(options?: any, context?: FieldContext) {
-    this.context = context;
-    this.database = context.database;
-    this.collection = context.collection;
-    this.options = options || {};
-    this.init();
-  }
-
-  // TODO
   async sync(syncOptions: SyncOptions) {
     await this.collection.sync({
       ...syncOptions,
@@ -61,7 +76,7 @@ export abstract class Field {
     // code
   }
 
-  on(eventName: string, listener: (...args: any[]) => void) {
+  on(eventName: ModelEventTypes, listener: (...args: any[]) => void) {
     this.database.on(`${this.collection.name}.${eventName}`, listener);
     return this;
   }
@@ -75,6 +90,53 @@ export abstract class Field {
     return this.options[name];
   }
 
+  remove() {
+    this.collection.removeIndex([this.name]);
+    return this.collection.removeField(this.name);
+  }
+
+  columnName() {
+    if (this.options.field) {
+      return this.options.field;
+    }
+
+    if (this.database.options.underscored) {
+      return snakeCase(this.name);
+    }
+
+    return this.name;
+  }
+
+  async existsInDb(options?: Transactionable) {
+    const opts = {
+      transaction: options?.transaction,
+    };
+    let sql;
+    if (this.database.sequelize.getDialect() === 'sqlite') {
+      sql = `SELECT *
+             from pragma_table_info('${this.collection.model.tableName}')
+             WHERE name = '${this.columnName()}'`;
+    } else if (this.database.inDialect('mysql', 'mariadb')) {
+      sql = `
+        select column_name
+        from INFORMATION_SCHEMA.COLUMNS
+        where TABLE_SCHEMA = '${this.database.options.database}'
+          AND TABLE_NAME = '${this.collection.model.tableName}'
+          AND column_name = '${this.columnName()}'
+      `;
+    } else {
+      sql = `
+        select column_name
+        from INFORMATION_SCHEMA.COLUMNS
+        where TABLE_NAME = '${this.collection.model.tableName}'
+          AND column_name = '${this.columnName()}'
+          AND table_schema = '${this.collection.collectionSchema() || 'public'}'
+      `;
+    }
+    const [rows] = await this.database.sequelize.query(sql, opts);
+    return rows.length > 0;
+  }
+
   merge(obj: any) {
     Object.assign(this.options, obj);
   }
@@ -82,24 +144,43 @@ export abstract class Field {
   bind() {
     const { model } = this.context.collection;
     model.rawAttributes[this.name] = this.toSequelize();
+
     // @ts-ignore
     model.refreshAttributes();
+    if (this.options.index) {
+      this.context.collection.addIndex([this.name]);
+    }
   }
 
   unbind() {
     const { model } = this.context.collection;
+
+    delete model.prototype[this.name];
+
     model.removeAttribute(this.name);
+    if (this.options.index || this.options.unique) {
+      this.context.collection.removeIndex([this.name]);
+    }
   }
 
   toSequelize(): any {
     const opts = _.omit(this.options, ['name']);
+
     if (this.dataType) {
-      Object.assign(opts, { type: this.dataType });
+      // @ts-ignore
+      Object.assign(opts, { type: this.database.sequelize.normalizeDataType(this.dataType) });
     }
+
+    Object.assign(opts, this.additionalSequelizeOptions());
+
     return opts;
   }
 
-  isSqlite() {
-    return this.database.sequelize.getDialect() === 'sqlite';
+  additionalSequelizeOptions() {
+    return {};
+  }
+
+  typeToString() {
+    return this.dataType.toString();
   }
 }

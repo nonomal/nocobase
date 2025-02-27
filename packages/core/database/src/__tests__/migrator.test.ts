@@ -1,12 +1,22 @@
-import { Database, Migration, mockDatabase } from '@nocobase/database';
+/**
+ * This file is part of the NocoBase (R) project.
+ * Copyright (c) 2020-2024 NocoBase Co., Ltd.
+ * Authors: NocoBase Team.
+ *
+ * This project is dual-licensed under AGPL-3.0 and NocoBase Commercial License.
+ * For more information, please refer to: https://www.nocobase.com/agreement.
+ */
 
-const names = (migrations: Array<{ name: string }>) => migrations.map(m => m.name);
+import { vi } from 'vitest';
+import { Database, Migration, mockDatabase } from '@nocobase/database';
+import { resolve } from 'path';
+
+const names = (migrations: Array<{ name: string }>) => migrations.map((m) => m.name);
 
 describe('migrator', () => {
   let db: Database;
 
   beforeEach(async () => {
-
     db = mockDatabase({
       tablePrefix: 'test_',
     });
@@ -18,8 +28,29 @@ describe('migrator', () => {
     await db.close();
   });
 
+  test('migrations', async () => {
+    expect(db.getModel('migrations').tableName).toBe('test_migrations');
+  });
+
+  test('addMigrations', async () => {
+    db.addMigrations({
+      directory: resolve(__dirname, './fixtures/migrations'),
+    });
+    await db.migrator.up();
+    expect(names(await db.migrator.executed())).toEqual(['m1', 'm2']);
+  });
+
+  test('addMigrations', async () => {
+    db.addMigrations({
+      namespace: 'test',
+      directory: resolve(__dirname, './fixtures/migrations'),
+    });
+    await db.migrator.up();
+    expect(names(await db.migrator.executed())).toEqual(['test/m1', 'test/m2']);
+  });
+
   test('up and down', async () => {
-    const spy = jest.fn();
+    const spy = vi.fn();
     db.addMigration({
       name: 'migration1',
       migration: class extends Migration {

@@ -1,6 +1,15 @@
+/**
+ * This file is part of the NocoBase (R) project.
+ * Copyright (c) 2020-2024 NocoBase Co., Ltd.
+ * Authors: NocoBase Team.
+ *
+ * This project is dual-licensed under AGPL-3.0 and NocoBase Commercial License.
+ * For more information, please refer to: https://www.nocobase.com/agreement.
+ */
+
 import { ACL } from './acl';
 
-type ConditionFunc = (ctx: any) => Promise<boolean>;
+export type ConditionFunc = (ctx: any) => Promise<boolean> | boolean;
 
 export class AllowManager {
   protected skipActions = new Map<string, Map<string, string | ConditionFunc | true>>();
@@ -12,17 +21,22 @@ export class AllowManager {
       return ctx.state.currentUser;
     });
 
+    this.registerAllowCondition('public', (ctx) => {
+      return true;
+    });
+
     this.registerAllowCondition('allowConfigure', async (ctx) => {
       const roleName = ctx.state.currentRole;
       if (!roleName) {
         return false;
       }
 
-      const roleInstance = await ctx.db.getRepository('roles').findOne({
-        name: roleName,
-      });
+      const role = acl.getRole(roleName);
+      if (!role) {
+        return false;
+      }
 
-      return roleInstance?.get('allowConfigure');
+      return role.getStrategy()?.allowConfigure;
     });
   }
 
@@ -41,9 +55,11 @@ export class AllowManager {
     for (const fetchActionStep of fetchActionSteps) {
       const resource = this.skipActions.get(fetchActionStep);
       if (resource) {
-        const condition = resource.get('*') || resource.get(actionName);
-        if (condition) {
-          results.push(typeof condition === 'string' ? this.registeredCondition.get(condition) : condition);
+        for (const fetchActionStep of ['*', actionName]) {
+          const condition = resource.get(fetchActionStep);
+          if (condition) {
+            results.push(typeof condition === 'string' ? this.registeredCondition.get(condition) : condition);
+          }
         }
       }
     }
@@ -55,34 +71,40 @@ export class AllowManager {
     this.registeredCondition.set(name, condition);
   }
 
+  async isAllowed(resourceName: string, actionName: string, ctx: any) {
+    const skippedConditions = this.getAllowedConditions(resourceName, actionName);
+
+    for (const skippedCondition of skippedConditions) {
+      if (skippedCondition) {
+        let skipResult = false;
+
+        if (typeof skippedCondition === 'function') {
+          skipResult = await skippedCondition(ctx);
+        } else if (skippedCondition) {
+          skipResult = true;
+        }
+
+        if (skipResult) {
+          return true;
+        }
+      }
+    }
+
+    return false;
+  }
+
   aclMiddleware() {
     return async (ctx, next) => {
       const { resourceName, actionName } = ctx.action;
-      const skippedConditions = ctx.app.acl.allowManager.getAllowedConditions(resourceName, actionName);
-      let skip = false;
-
-      for (const skippedCondition of skippedConditions) {
-        if (skippedCondition) {
-          let skipResult = false;
-
-          if (typeof skippedCondition === 'function') {
-            skipResult = await skippedCondition(ctx);
-          } else if (skippedCondition) {
-            skipResult = true;
-          }
-
-          if (skipResult) {
-            skip = true;
-            break;
-          }
-        }
-      }
+      const skip = await this.acl.allowManager.isAllowed(resourceName, actionName, ctx);
 
       if (skip) {
         ctx.permission = {
+          ...(ctx.permission || {}),
           skip: true,
         };
       }
+
       await next();
     };
   }

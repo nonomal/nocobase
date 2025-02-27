@@ -1,11 +1,21 @@
-import { FormItem, FormLayout } from '@formily/antd';
+/**
+ * This file is part of the NocoBase (R) project.
+ * Copyright (c) 2020-2024 NocoBase Co., Ltd.
+ * Authors: NocoBase Team.
+ *
+ * This project is dual-licensed under AGPL-3.0 and NocoBase Commercial License.
+ * For more information, please refer to: https://www.nocobase.com/agreement.
+ */
+
+import { FormItem, FormLayout } from '@formily/antd-v5';
 import { ArrayField } from '@formily/core';
 import { connect, useField, useForm } from '@formily/react';
 import { Checkbox, Table, Tag } from 'antd';
 import { isEmpty } from 'lodash';
 import React, { createContext } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useCollectionManager, useCompile, useRecord } from '../..';
+import { useCollectionManager_deprecated, useCompile, useRecord } from '../..';
+import { antTableCell } from '../style';
 import { useAvailableActions } from './RoleTable';
 import { ScopeSelect } from './ScopeSelect';
 
@@ -21,6 +31,7 @@ const toActionMap = (arr: any[]) => {
 };
 
 export const RoleResourceCollectionContext = createContext<any>({});
+RoleResourceCollectionContext.displayName = 'RoleResourceCollectionContext';
 
 export const RolesResourcesActions = connect((props) => {
   // const { onChange } = props;
@@ -36,8 +47,9 @@ export const RolesResourcesActions = connect((props) => {
   const form = useForm();
   const roleCollection = useRecord();
   const availableActions = useAvailableActions();
-  const { getCollection } = useCollectionManager();
-  const collection = getCollection(roleCollection.name);
+  const { getCollection, getCollectionFields } = useCollectionManager_deprecated();
+  const collection = getCollection(roleCollection.collectionName);
+  const collectionFields = getCollectionFields(roleCollection.collectionName);
   const compile = useCompile();
   const { t } = useTranslation();
   const field = useField<ArrayField>();
@@ -50,20 +62,22 @@ export const RolesResourcesActions = connect((props) => {
     return action?.fields?.includes(fieldName);
   };
   const availableActionsWithFields = availableActions.filter((action) => action.allowConfigureFields);
-  const fieldPermissions = collection?.fields?.filter(field => field.interface)?.map((field) => {
-    const permission = { ...field };
-    for (const action of availableActionsWithFields) {
-      permission[action.name] = inAction(action.name, field.name);
-    }
-    return permission;
-  });
+  const fieldPermissions = collectionFields
+    ?.filter((field) => field.interface)
+    ?.map((field) => {
+      const permission = { ...field };
+      for (const action of availableActionsWithFields) {
+        permission[action.name] = inAction(action.name, field.name);
+      }
+      return permission;
+    });
   const toggleAction = (actionName: string) => {
     if (actionMap[actionName]) {
       delete actionMap[actionName];
     } else {
       actionMap[actionName] = {
         name: actionName,
-        fields: collection?.fields?.filter(field => field.interface)?.map?.((item) => item.name),
+        fields: collectionFields?.filter((field) => field.interface)?.map?.((item) => item.name),
       };
     }
     onChange(Object.values(actionMap));
@@ -79,7 +93,8 @@ export const RolesResourcesActions = connect((props) => {
   };
   const allChecked = {};
   for (const action of availableActionsWithFields) {
-    allChecked[action.name] = collection?.fields?.filter(field => field.interface)?.length === actionMap?.[action.name]?.fields?.length;
+    allChecked[action.name] =
+      collectionFields?.filter((field) => field.interface)?.length === actionMap?.[action.name]?.fields?.length;
   }
   return (
     <div>
@@ -87,6 +102,7 @@ export const RolesResourcesActions = connect((props) => {
         <FormLayout layout={'vertical'}>
           <FormItem label={t('Action permission')}>
             <Table
+              className={antTableCell}
               size={'small'}
               pagination={false}
               columns={[
@@ -107,7 +123,7 @@ export const RolesResourcesActions = connect((props) => {
                 },
                 {
                   dataIndex: 'enabled',
-                  title: t("Allow"),
+                  title: t('Allow'),
                   render: (enabled, action) => (
                     <Checkbox
                       checked={enabled}
@@ -119,7 +135,7 @@ export const RolesResourcesActions = connect((props) => {
                 },
                 {
                   dataIndex: 'scope',
-                  title: t("Data scope"),
+                  title: t('Data scope'),
                   render: (value, action) =>
                     !action.onNewRecord && (
                       <ScopeSelect
@@ -150,6 +166,7 @@ export const RolesResourcesActions = connect((props) => {
           </FormItem>
           <FormItem label={t('Field permission')}>
             <Table
+              className={antTableCell}
               pagination={false}
               dataSource={fieldPermissions}
               columns={[
@@ -173,7 +190,7 @@ export const RolesResourcesActions = connect((props) => {
                             if (checked) {
                               item.fields = [];
                             } else {
-                              item.fields = collection?.fields?.map?.((item) => item.name);
+                              item.fields = collectionFields?.map?.((item) => item.name);
                             }
                             actionMap[action.name] = item;
                             onChange(Object.values(actionMap));
@@ -185,6 +202,7 @@ export const RolesResourcesActions = connect((props) => {
                     render: (checked, field) => (
                       <Checkbox
                         checked={checked}
+                        aria-label={`${action.name}_checkbox`}
                         onChange={() => {
                           const item = actionMap[action.name] || {
                             name: action.name,

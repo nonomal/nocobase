@@ -1,3 +1,12 @@
+/**
+ * This file is part of the NocoBase (R) project.
+ * Copyright (c) 2020-2024 NocoBase Co., Ltd.
+ * Authors: NocoBase Team.
+ *
+ * This project is dual-licensed under AGPL-3.0 and NocoBase Commercial License.
+ * For more information, please refer to: https://www.nocobase.com/agreement.
+ */
+
 import { mockDatabase } from '../index';
 import { Collection } from '../../collection';
 import { Database } from '@nocobase/database';
@@ -13,6 +22,7 @@ describe('destroy with targetKey', function () {
 
   beforeEach(async () => {
     db = mockDatabase();
+    await db.clean({ drop: true });
     User = db.collection({
       name: 'users',
       autoGenId: false,
@@ -76,7 +86,7 @@ describe('destroy with targetKey', function () {
 });
 
 describe('destroy', () => {
-  let db;
+  let db: Database;
   let User: Collection;
   let Post: Collection;
 
@@ -86,6 +96,10 @@ describe('destroy', () => {
 
   beforeEach(async () => {
     db = mockDatabase();
+    await db.clean({
+      drop: true,
+    });
+
     User = db.collection({
       name: 'users',
       fields: [
@@ -103,6 +117,122 @@ describe('destroy', () => {
       ],
     });
     await db.sync();
+  });
+
+  test('destroy records from no pk tables that filterTargetKey configured', async () => {
+    const Test = db.collection({
+      name: 'test',
+      timestamps: false,
+      autoGenId: false,
+      filterTargetKey: 'test',
+      fields: [
+        {
+          type: 'string',
+          name: 'test',
+        },
+      ],
+    });
+
+    await db.sync();
+
+    const t1 = await Test.repository.create({
+      values: {
+        test: 't1',
+      },
+    });
+
+    await Test.repository.create({
+      values: {
+        test: 't2',
+      },
+    });
+
+    await Test.repository.destroy({
+      filterByTk: 't2',
+    });
+
+    expect(await Test.repository.count()).toEqual(1);
+    expect((await Test.repository.findOne()).get('test')).toEqual('t1');
+  });
+
+  test('destroy records from tables without primary keys', async () => {
+    const Test = db.collection({
+      name: 'test',
+      timestamps: false,
+      autoGenId: false,
+      fields: [
+        {
+          type: 'string',
+          name: 'test',
+        },
+      ],
+    });
+
+    await db.sync();
+
+    const t1 = await Test.repository.create({
+      values: {
+        test: 't1',
+      },
+    });
+
+    await Test.repository.create({
+      values: {
+        test: 't2',
+      },
+    });
+
+    const destroy = async () => {
+      await Test.repository.destroy({
+        filterByTk: 111,
+      });
+    };
+
+    await expect(destroy()).rejects.toThrowError('filterByTk is not supported for collection that has no primary key');
+
+    await Test.repository.destroy({
+      filter: {
+        test: 't2',
+      },
+    });
+
+    expect(await Test.repository.count()).toEqual(1);
+    expect((await Test.repository.findOne()).get('test')).toEqual('t1');
+  });
+
+  test('destroy record has no primary key', async () => {
+    Post.addField('tags', {
+      type: 'belongsToMany',
+    });
+
+    const tags = db.collection({
+      name: 'tags',
+      fields: [
+        { type: 'belongsToMany', name: 'posts' },
+        { type: 'string', name: 'name' },
+      ],
+    });
+
+    await db.sync();
+
+    const post = await Post.repository.create({
+      values: {
+        title: 'p1',
+        tags: [{ name: 't1' }],
+      },
+    });
+
+    const throughCollection = db.getCollection(tags.getField('posts').options.through);
+
+    expect(await throughCollection.repository.count()).toEqual(1);
+
+    await throughCollection.repository.destroy({
+      filter: {
+        postId: post.get('id'),
+      },
+    });
+
+    expect(await throughCollection.repository.count()).toEqual(0);
   });
 
   test('destroy with filter and filterByPk', async () => {
@@ -192,5 +322,64 @@ describe('destroy', () => {
 
     await User.repository.destroy(u2['id']);
     expect(await User.repository.count()).toEqual(2);
+  });
+
+  it('should not destroy data when filter is empty', async () => {
+    await User.repository.createMany({
+      records: [
+        {
+          name: 'u1',
+        },
+        {
+          name: 'u3',
+        },
+        {
+          name: 'u2',
+        },
+      ],
+    });
+
+    let err;
+
+    try {
+      await User.repository.destroy({
+        filter: {},
+      });
+    } catch (e) {
+      err = e;
+    }
+
+    expect(await User.repository.count()).toBe(3);
+  });
+
+  it('should not destroy data when filter is not valid', async () => {
+    await User.repository.createMany({
+      records: [
+        {
+          name: 'u1',
+        },
+        {
+          name: 'u3',
+        },
+        {
+          name: 'u2',
+        },
+      ],
+    });
+
+    let err;
+
+    try {
+      await User.repository.destroy({
+        filter: {
+          $and: [],
+          $or: [],
+        },
+      });
+    } catch (e) {
+      err = e;
+    }
+
+    expect(await User.repository.count()).toBe(3);
   });
 });

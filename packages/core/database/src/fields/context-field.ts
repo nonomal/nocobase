@@ -1,3 +1,12 @@
+/**
+ * This file is part of the NocoBase (R) project.
+ * Copyright (c) 2020-2024 NocoBase Co., Ltd.
+ * Authors: NocoBase Team.
+ *
+ * This project is dual-licensed under AGPL-3.0 and NocoBase Commercial License.
+ * For more information, please refer to: https://www.nocobase.com/agreement.
+ */
+
 import lodash from 'lodash';
 import { DataTypes } from 'sequelize';
 import { Model } from '../model';
@@ -9,14 +18,12 @@ export class ContextField extends Field {
     return DataTypes[type.toUpperCase()] || DataTypes.STRING;
   }
 
-  init() {
+  listener = async (model: Model, options) => {
     const { name, dataIndex } = this.options;
-    this.listener = async (model: Model, options) => {
-      const { context } = options;
-      model.set(name, lodash.get(context, dataIndex));
-      model.changed(name, true);
-    };
-  }
+    const { context } = options;
+    model.set(name, lodash.get(context, dataIndex));
+    model.changed(name, true);
+  };
 
   bind() {
     super.bind();

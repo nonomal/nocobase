@@ -1,10 +1,11 @@
 {
   "name": "{{{packageName}}}",
   "version": "{{{packageVersion}}}",
-  "main": "lib/server/index.js",
+  "main": "dist/server/index.js",
   "dependencies": {},
   "peerDependencies": {
-    "@nocobase/server": "*",
-    "@nocobase/test": "*"
+    "@nocobase/client": "1.x",
+    "@nocobase/server": "1.x",
+    "@nocobase/test": "1.x"
   }
 }

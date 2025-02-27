@@ -1,8 +1,17 @@
-import { MockServer, mockServer } from './index';
+/**
+ * This file is part of the NocoBase (R) project.
+ * Copyright (c) 2020-2024 NocoBase Co., Ltd.
+ * Authors: NocoBase Team.
+ *
+ * This project is dual-licensed under AGPL-3.0 and NocoBase Commercial License.
+ * For more information, please refer to: https://www.nocobase.com/agreement.
+ */
+
 import { registerActions } from '@nocobase/actions';
+import { mockServer } from './index';
 
 describe('destroy action', () => {
-  let app: MockServer;
+  let app;
   let Post;
   let Comment;
   let Tag;
@@ -11,6 +20,8 @@ describe('destroy action', () => {
 
   beforeEach(async () => {
     app = mockServer();
+    await app.db.clean({ drop: true });
+
     registerActions(app);
 
     PostTag = app.collection({
@@ -74,6 +85,7 @@ describe('destroy action', () => {
         filterByTk: p1.get('id'),
       });
 
+    expect(response.statusCode).toEqual(200);
     expect(await Post.repository.count()).toEqual(0);
   });
 
@@ -142,10 +154,7 @@ describe('destroy action', () => {
 
     const postProfile = await Profile.repository.findOne();
 
-    const response = await app
-      .agent()
-      .resource('posts.profile', p1.get('id'))
-      .destroy();
+    const response = await app.agent().resource('posts.profile', p1.get('id')).destroy();
 
     expect(await Profile.repository.count()).toEqual(0);
   });

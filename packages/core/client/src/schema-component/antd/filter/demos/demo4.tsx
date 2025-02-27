@@ -1,3 +1,5 @@
+
+
 import { ISchema } from '@formily/react';
 import {
   AntdSchemaComponentProvider,
@@ -5,7 +7,7 @@ import {
   Input,
   SchemaComponent,
   SchemaComponentProvider,
-  Select
+  Select,
 } from '@nocobase/client';
 import { Space } from 'antd';
 import React, { useState } from 'react';
@@ -78,12 +80,12 @@ const defaultValue = {
   $or: [
     {
       name: {
-        $ne: '{{node1.field1}}',
+        $ne: 'aaa',
       },
     },
     {
       'tags.title': {
-        $eq: 'aaa',
+        $eq: 'bbb',
       },
     },
   ],

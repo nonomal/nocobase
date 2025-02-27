@@ -1,16 +1,24 @@
-import _ from 'lodash';
+/**
+ * This file is part of the NocoBase (R) project.
+ * Copyright (c) 2020-2024 NocoBase Co., Ltd.
+ * Authors: NocoBase Team.
+ *
+ * This project is dual-licensed under AGPL-3.0 and NocoBase Commercial License.
+ * For more information, please refer to: https://www.nocobase.com/agreement.
+ */
+
+import { assign, MergeStrategies, requireModule, wrapMiddlewareWithLogging } from '@nocobase/utils';
 import compose from 'koa-compose';
-import Resource from './resource';
-import { requireModule } from './utils';
-import { HandlerType } from './resourcer';
+import _ from 'lodash';
 import Middleware, { MiddlewareType } from './middleware';
-import { assign, MergeStrategies } from './assign';
+import Resource from './resource';
+import { HandlerType } from './resourcer';
 
 export type ActionType = string | HandlerType | ActionOptions;
 
 export type DefaultActionType = 'list' | 'create' | 'get' | 'update' | 'destroy' | 'set' | 'add' | 'remove';
 
-export type ActionName = DefaultActionType | Omit<String, DefaultActionType>;
+export type ActionName = DefaultActionType | Omit<string, DefaultActionType>;
 
 export interface ActionContext {
   action?: Action;
@@ -161,27 +169,38 @@ export interface ActionParams {
    */
   values?: any;
   /**
-   * 当前资源的主体，对应的表名或 Model 名称
+   * This method is deprecated and should not be used.
+   * Use {@link action.resourceName.split(',')[0]} instead.
+   * @deprecated
    */
   resourceName?: string;
   /**
-   * 资源标识符
+   * This method is deprecated and should not be used.
+   * Use {@link filterByTk} instead.
+   * @deprecated
    */
   resourceIndex?: string;
   /**
-   * 资源的从属关系
+   * This method is deprecated and should not be used.
+   * Use {@link action.resourceName.split(',')[1]} instead.
+   * @deprecated
    */
   associatedName?: string;
   /**
-   * 从属关系的标识符
+   * This method is deprecated and should not be used.
+   * Use {@link action.sourceId} instead.
+   * @deprecated
    */
   associatedIndex?: string;
   /**
-   * 从属关系的当前实例
+   * This method is deprecated and should not be used.
+   * @deprecated
    */
   associated?: any;
   /**
-   * 资源提供哪些行为或方法
+   * This method is deprecated and should not be used.
+   * Use {@link action.actionName} instead.
+   * @deprecated
    */
   actionName?: string;
   /**
@@ -204,11 +223,23 @@ export class Action {
   public params: ActionParams = {};
 
   public actionName: string;
+
   public resourceName: string;
+
+  /**
+   * This method is deprecated and should not be used.
+   * Use {@link this.sourceId} instead.
+   * @deprecated
+   */
   public resourceOf: any;
+
+  public sourceId: any;
 
   public readonly middlewares: Array<Middleware> = [];
 
+  /**
+   * @internal
+   */
   constructor(options: ActionOptions) {
     options = requireModule(options);
     if (typeof options === 'function') {
@@ -221,6 +252,22 @@ export class Action {
     this.mergeParams(params);
   }
 
+  /**
+   * @internal
+   */
+  toJSON() {
+    return {
+      actionName: this.actionName,
+      resourceName: this.resourceName,
+      resourceOf: this.sourceId,
+      sourceId: this.sourceId,
+      params: this.params,
+    };
+  }
+
+  /**
+   * @internal
+   */
   clone() {
     const options = _.cloneDeep(this.options);
     delete options.middleware;
@@ -232,11 +279,22 @@ export class Action {
     return action;
   }
 
+  /**
+   * @internal
+   */
   setContext(context: any) {
     this.context = context;
   }
 
   mergeParams(params: ActionParams, strategies: MergeStrategies = {}) {
+    if (!this.params) {
+      this.params = {};
+    }
+
+    if (!params) {
+      return;
+    }
+
     assign(this.params, params, {
       filter: 'andMerge',
       fields: 'intersect',
@@ -249,52 +307,87 @@ export class Action {
     });
   }
 
+  /**
+   * @internal
+   */
   setResource(resource: Resource) {
     this.resource = resource;
     return this;
   }
 
+  /**
+   * @internal
+   */
   getResource() {
     return this.resource;
   }
 
+  /**
+   * @internal
+   */
   getOptions(): ActionOptions {
     return this.options;
   }
 
+  /**
+   * @internal
+   */
   setName(name: ActionName) {
     this.name = name;
     return this;
   }
 
+  /**
+   * @internal
+   */
   getName() {
     return this.name;
   }
 
+  /**
+   * @internal
+   */
   getMiddlewareHandlers() {
     return this.middlewares
       .filter((middleware) => middleware.canAccess(this.name))
       .map((middleware) => middleware.getHandler());
   }
 
+  /**
+   * @internal
+   */
   getHandler() {
     const handler = requireModule(this.handler || this.resource.resourcer.getRegisteredHandler(this.name));
     if (typeof handler !== 'function') {
       throw new Error('Handler must be a function!');
     }
+
     return handler;
   }
 
+  /**
+   * @internal
+   */
   getHandlers() {
-    return [...this.resource.resourcer.getMiddlewares(), ...this.getMiddlewareHandlers(), this.getHandler()].filter(
-      Boolean,
-    );
+    const handlers = [
+      ...this.resource.resourcer.getMiddlewares(),
+      ...this.getMiddlewareHandlers(),
+      this.getHandler(),
+    ].filter(Boolean);
+
+    return handlers.map((fn) => wrapMiddlewareWithLogging(fn));
   }
 
+  /**
+   * @internal
+   */
   async execute(context: any, next?: any) {
     return await compose(this.getHandlers())(context, next);
   }
 
+  /**
+   * @internal
+   */
   static toInstanceMap(actions: object, resource?: Resource) {
     return new Map(
       Object.entries(actions).map(([key, options]) => {

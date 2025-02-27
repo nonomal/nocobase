@@ -1,3 +1,12 @@
+/**
+ * This file is part of the NocoBase (R) project.
+ * Copyright (c) 2020-2024 NocoBase Co., Ltd.
+ * Authors: NocoBase Team.
+ *
+ * This project is dual-licensed under AGPL-3.0 and NocoBase Commercial License.
+ * For more information, please refer to: https://www.nocobase.com/agreement.
+ */
+
 import _ from 'lodash';
 // @ts-ignore
 import { pathToRegexp } from 'path-to-regexp';
@@ -7,6 +16,7 @@ import { ResourceType } from './resource';
 export interface ParseRequest {
   path: string;
   method: string;
+  namespace?: string;
   // 资源类型
   type?: ResourceType;
 }
@@ -58,7 +68,8 @@ export function parseRequest(request: ParseRequest, options: ParseOptions = {}):
   };
   const keys = [];
   const regexp = pathToRegexp('/resourcer/{:associatedName.}?:resourceName{\\::actionName}', keys);
-  const matches = regexp.exec(request.path);
+  const reqPath = decodeURI(request.path);
+  const matches = regexp.exec(reqPath);
   if (matches) {
     const params = {};
     keys.forEach((obj, index) => {
@@ -140,6 +151,13 @@ export function parseRequest(request: ParseRequest, options: ParseOptions = {}):
         delete: accessors.remove,
       },
     },
+    set: {
+      '/:associatedName/:associatedIndex/:resourceName': {
+        get: accessors.list,
+        post: accessors.add,
+        delete: accessors.remove,
+      },
+    },
   };
 
   const params: ParsedParams = {};
@@ -155,7 +173,7 @@ export function parseRequest(request: ParseRequest, options: ParseOptions = {}):
   for (const path in defaults[type]) {
     const keys = [];
     const regexp = pathToRegexp(`${prefix}${path}`, keys, {});
-    const matches = regexp.exec(request.path);
+    const matches = regexp.exec(reqPath);
     if (!matches) {
       continue;
     }
@@ -180,17 +198,11 @@ export function parseRequest(request: ParseRequest, options: ParseOptions = {}):
     }
   }
 
-  return params;
-}
+  if (params.associatedIndex) {
+    params.associatedIndex = decodeURIComponent(params.associatedIndex);
+  }
 
-export function requireModule(module: any) {
-  if (typeof module === 'string') {
-    module = require(module);
-  }
-  if (typeof module !== 'object') {
-    return module;
-  }
-  return module.__esModule ? module.default : module;
+  return params;
 }
 
 export function parseQuery(input: string): any {
@@ -201,6 +213,7 @@ export function parseQuery(input: string): any {
     // 逗号分隔转换为数组
     // comma: true,
   });
+
   // filter 支持 json string
   if (typeof query.filter === 'string') {
     query.filter = JSON.parse(query.filter);

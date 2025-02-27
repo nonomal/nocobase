@@ -1,24 +1,19 @@
 {
   "name": "@nocobase/actions",
-  "version": "0.7.0-alpha.83",
+  "version": "1.5.18",
   "description": "",
-  "license": "Apache-2.0",
-  "licenses": [
-    {
-      "type": "Apache-2.0",
-      "url": "http://www.apache.org/licenses/LICENSE-2.0"
-    }
-  ],
+  "license": "AGPL-3.0",
   "main": "./lib/index.js",
   "types": "./lib/index.d.ts",
   "dependencies": {
-    "@nocobase/database": "0.7.0-alpha.83",
-    "@nocobase/resourcer": "0.7.0-alpha.83"
+    "@nocobase/cache": "1.5.18",
+    "@nocobase/database": "1.5.18",
+    "@nocobase/resourcer": "1.5.18"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/nocobase/nocobase.git",
     "directory": "packages/actions"
   },
-  "gitHead": "a00b45a2686695c5f4824d074ac5e1aff210793a"
+  "gitHead": "d0b4efe4be55f8c79a98a331d99d9f8cf99021a1"
 }

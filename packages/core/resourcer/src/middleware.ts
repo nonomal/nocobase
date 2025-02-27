@@ -1,5 +1,15 @@
+/**
+ * This file is part of the NocoBase (R) project.
+ * Copyright (c) 2020-2024 NocoBase Co., Ltd.
+ * Authors: NocoBase Team.
+ *
+ * This project is dual-licensed under AGPL-3.0 and NocoBase Commercial License.
+ * For more information, please refer to: https://www.nocobase.com/agreement.
+ */
+
+import compose from 'koa-compose';
+import { requireModule } from '@nocobase/utils';
 import { ActionName } from './action';
-import { requireModule } from './utils';
 import { HandlerType } from './resourcer';
 
 export type MiddlewareType = string | string[] | HandlerType | HandlerType[] | MiddlewareOptions | MiddlewareOptions[];
@@ -22,6 +32,7 @@ export interface MiddlewareOptions {
 
 export class Middleware {
   protected options: MiddlewareOptions;
+  private middlewares: HandlerType[] = [];
 
   constructor(options: MiddlewareOptions | Function) {
     options = requireModule(options);
@@ -37,7 +48,15 @@ export class Middleware {
     if (typeof handler !== 'function') {
       throw new Error('Handler must be a function!');
     }
-    return handler;
+    return (ctx, next) => compose([handler, ...this.middlewares])(ctx, next);
+  }
+
+  use(middleware: HandlerType) {
+    this.middlewares.push(middleware);
+  }
+
+  disuse(middleware: HandlerType) {
+    this.middlewares.splice(this.middlewares.indexOf(middleware), 1);
   }
 
   canAccess(name: ActionName) {
@@ -73,3 +92,29 @@ export class Middleware {
 }
 
 export default Middleware;
+
+export function branch(
+  map: {
+    [key: string]: HandlerType;
+  } = {},
+  reducer: (ctx) => string,
+  options: {
+    keyNotFound?(ctx, next): void;
+    handlerNotSet?(ctx, next): void;
+  } = {},
+): HandlerType {
+  return (ctx, next) => {
+    const key = reducer(ctx);
+
+    if (!key) {
+      return options.keyNotFound ? options.keyNotFound(ctx, next) : ctx.throw(404);
+    }
+
+    const handler = map[key];
+    if (!handler) {
+      return options.handlerNotSet ? options.handlerNotSet(ctx, next) : ctx.throw(404);
+    }
+
+    return handler(ctx, next);
+  };
+}

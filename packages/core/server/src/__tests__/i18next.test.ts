@@ -1,3 +1,12 @@
+/**
+ * This file is part of the NocoBase (R) project.
+ * Copyright (c) 2020-2024 NocoBase Co., Ltd.
+ * Authors: NocoBase Team.
+ *
+ * This project is dual-licensed under AGPL-3.0 and NocoBase Commercial License.
+ * For more information, please refer to: https://www.nocobase.com/agreement.
+ */
+
 import supertest from 'supertest';
 import { Application } from '../application';
 
@@ -9,12 +18,12 @@ describe('i18next', () => {
     app = new Application({
       database: {
         dialect: 'sqlite',
-        dialectModule: require('sqlite3'),
         storage: ':memory:',
       },
       resourcer: {
         prefix: '/api',
       },
+      acl: false,
       dataWrapping: false,
       registerActions: false,
     });
@@ -28,7 +37,7 @@ describe('i18next', () => {
   });
 
   afterEach(async () => {
-    return app.db.close();
+    return app.destroy();
   });
 
   it('global', async () => {
@@ -49,7 +58,7 @@ describe('i18next', () => {
     });
     const response1 = await agent.get('/api/tests:get');
     expect(response1.text).toEqual('Hello');
-    const response2 = await agent.get('/api/tests:get').set('Accept-Language', 'zh-CN');
+    const response2 = await agent.get('/api/tests:get').set('X-Locale', 'zh-CN');
     expect(response2.text).toEqual('你好');
     const response3 = await agent.get('/api/tests:get?locale=zh-CN');
     expect(response3.text).toEqual('你好');

@@ -1,22 +1,15 @@
 {
   "name": "@nocobase/sdk",
-  "version": "0.7.0-alpha.83",
-  "license": "Apache-2.0",
-  "licenses": [
-    {
-      "type": "Apache-2.0",
-      "url": "http://www.apache.org/licenses/LICENSE-2.0"
-    }
-  ],
-  "main": "lib",
-  "module": "es/index.js",
-  "typings": "es/index.d.ts",
+  "version": "1.5.18",
+  "license": "AGPL-3.0",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
   "dependencies": {
-    "axios": "^0.26.1",
+    "axios": "^1.7.0",
     "qs": "^6.10.1"
   },
   "devDependencies": {
     "axios-mock-adapter": "^1.20.0"
   },
-  "gitHead": "a00b45a2686695c5f4824d074ac5e1aff210793a"
+  "gitHead": "d0b4efe4be55f8c79a98a331d99d9f8cf99021a1"
 }

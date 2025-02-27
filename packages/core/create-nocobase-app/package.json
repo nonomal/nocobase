@@ -1,17 +1,11 @@
 {
   "name": "create-nocobase-app",
-  "version": "0.7.0-alpha.83",
+  "version": "1.5.18",
   "main": "src/index.js",
-  "license": "Apache-2.0",
-  "licenses": [
-    {
-      "type": "Apache-2.0",
-      "url": "http://www.apache.org/licenses/LICENSE-2.0"
-    }
-  ],
+  "license": "AGPL-3.0",
   "dependencies": {
-    "@umijs/utils": "^3.5.20",
-    "axios": "^0.26.1",
+    "@umijs/utils": "3.5.20",
+    "axios": "^1.7.0",
     "chalk": "^4.1.1",
     "commander": "^9.2.0",
     "tar": "6.1.11"
@@ -24,5 +18,5 @@
     "url": "git+https://github.com/nocobase/nocobase.git",
     "directory": "packages/core/create-nocobase-app"
   },
-  "gitHead": "a00b45a2686695c5f4824d074ac5e1aff210793a"
+  "gitHead": "d0b4efe4be55f8c79a98a331d99d9f8cf99021a1"
 }

@@ -1,17 +1,28 @@
+/**
+ * This file is part of the NocoBase (R) project.
+ * Copyright (c) 2020-2024 NocoBase Co., Ltd.
+ * Authors: NocoBase Team.
+ *
+ * This project is dual-licensed under AGPL-3.0 and NocoBase Commercial License.
+ * For more information, please refer to: https://www.nocobase.com/agreement.
+ */
+
 import { PlusOutlined } from '@ant-design/icons';
-import { ArrayTable } from '@formily/antd';
+import { ArrayTable } from '@formily/antd-v5';
 import { ISchema } from '@formily/react';
 import { uid } from '@formily/shared';
-import { Button, Dropdown, Menu } from 'antd';
+import { Button, Dropdown, MenuProps } from 'antd';
 import { cloneDeep } from 'lodash';
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useRequest } from '../../api-client';
+import { useCollectionRecordData } from '../../data-source';
 import { RecordProvider } from '../../record-provider';
-import { ActionContext, SchemaComponent, useActionContext, useCompile } from '../../schema-component';
-import { useCollectionManager } from '../hooks';
+import { ActionContextProvider, SchemaComponent, useActionContext, useCompile } from '../../schema-component';
+import { useCollectionManager_deprecated } from '../hooks';
 import { IField } from '../interfaces/types';
-import { options } from './interfaces';
+import * as components from './components';
+import { useFieldInterfaceOptions } from './interfaces';
 
 const getSchema = (schema: IField): ISchema => {
   if (!schema) {
@@ -94,47 +105,54 @@ const useCreateSubField = () => {
 };
 
 export const AddSubFieldAction = () => {
-  const { getInterface } = useCollectionManager();
+  const { getInterface } = useCollectionManager_deprecated();
   const [visible, setVisible] = useState(false);
   const [schema, setSchema] = useState({});
   const compile = useCompile();
+  const options = useFieldInterfaceOptions();
   const { t } = useTranslation();
+  const items = useMemo(() => {
+    return options.map((option) => {
+      const children = option.children.map((child) => {
+        return { label: compile(child.title), key: child.name };
+      });
+      return {
+        label: compile(option.label),
+        key: option.key,
+        children,
+      };
+    });
+  }, [options]);
+  const menu = useMemo<MenuProps>(() => {
+    return {
+      style: {
+        maxHeight: '60vh',
+        overflow: 'auto',
+      },
+      onClick: (info) => {
+        const schema = getSchema(getInterface(info.key));
+        setSchema(schema);
+        setVisible(true);
+      },
+      items,
+    };
+  }, [items]);
+  const recordData = useCollectionRecordData();
+
   return (
-    <ActionContext.Provider value={{ visible, setVisible }}>
-      <Dropdown
-        overlay={
-          <Menu
-            style={{
-              maxHeight: '60vh',
-              overflow: 'auto',
-            }}
-            onClick={(info) => {
-              const schema = getSchema(getInterface(info.key));
-              setSchema(schema);
-              setVisible(true);
-            }}
-          >
-            {options.map((option) => {
-              return (
-                option.children.length > 0 && (
-                  <Menu.ItemGroup title={compile(option.label)}>
-                    {option.children.map((child) => {
-                      return <Menu.Item key={child.name}>{compile(child.title)}</Menu.Item>;
-                    })}
-                  </Menu.ItemGroup>
-                )
-              );
-            })}
-          </Menu>
-        }
-      >
+    <ActionContextProvider value={{ visible, setVisible }}>
+      <Dropdown menu={menu}>
         <Button icon={<PlusOutlined />} type={'primary'}>
           {t('Add field')}
         </Button>
       </Dropdown>
-      <RecordProvider record={{}}>
-        <SchemaComponent schema={schema} components={{ ArrayTable }} scope={{ createOnly: true, useCreateSubField }} />
+      <RecordProvider record={{}} parent={recordData}>
+        <SchemaComponent
+          schema={schema}
+          components={{ ...components, ArrayTable }}
+          scope={{ createOnly: true, useCreateSubField }}
+        />
       </RecordProvider>
-    </ActionContext.Provider>
+    </ActionContextProvider>
   );
 };

@@ -1,15 +1,121 @@
+/**
+ * This file is part of the NocoBase (R) project.
+ * Copyright (c) 2020-2024 NocoBase Co., Ltd.
+ * Authors: NocoBase Team.
+ *
+ * This project is dual-licensed under AGPL-3.0 and NocoBase Commercial License.
+ * For more information, please refer to: https://www.nocobase.com/agreement.
+ */
+
 import { Database } from '../../database';
 import { mockDatabase } from '../';
+import { IdentifierError } from '../../errors/identifier-error';
 
 describe('belongs to field', () => {
   let db: Database;
 
   beforeEach(async () => {
     db = mockDatabase();
+    await db.clean({ drop: true });
   });
 
   afterEach(async () => {
     await db.close();
+  });
+
+  it('should load with no action', async () => {
+    const User = db.collection({
+      name: 'users',
+      fields: [{ type: 'string', name: 'name', unique: true }],
+    });
+
+    const Post = db.collection({
+      name: 'posts',
+      fields: [
+        { type: 'string', name: 'title' },
+        { type: 'belongsTo', name: 'user', onDelete: 'NO ACTION' },
+      ],
+    });
+
+    await db.sync();
+
+    const u1 = await User.repository.create({ values: { name: 'u1' } });
+    const p1 = await Post.repository.create({ values: { title: 'p1', user: u1.id } });
+
+    // delete u1
+    await User.repository.destroy({ filterByTk: u1.id });
+
+    // list posts with user
+    const post = await Post.repository.findOne({
+      appends: ['user'],
+    });
+
+    expect(post.user).toBeNull();
+  });
+
+  it('should throw error when associated with item that null with target key', async () => {
+    const User = db.collection({
+      name: 'users',
+      fields: [{ type: 'string', name: 'name', unique: true }],
+    });
+
+    const Profile = db.collection({
+      name: 'profiles',
+      autoGenId: true,
+      timestamps: false,
+      fields: [
+        {
+          type: 'belongsTo',
+          name: 'user',
+          target: 'users',
+          foreignKey: 'userName',
+          targetKey: 'name',
+        },
+      ],
+    });
+
+    await db.sync();
+
+    await expect(
+      Profile.repository.create({
+        values: {
+          user: {},
+        },
+      }),
+    ).rejects.toThrow('The target key name is not set in users');
+  });
+  it('should check association keys type', async () => {
+    const User = db.collection({
+      name: 'users',
+      fields: [
+        { type: 'string', name: 'name' },
+        { type: 'bigInt', name: 'description' },
+      ],
+    });
+
+    let error;
+    try {
+      const Post = db.collection({
+        name: 'posts',
+        fields: [
+          { type: 'string', name: 'title' },
+          { type: 'string', name: 'userName' },
+          {
+            type: 'belongsTo',
+            name: 'user',
+            foreignKey: 'userName',
+            targetKey: 'description', // wrong type
+          },
+        ],
+      });
+    } catch (e) {
+      error = e;
+    }
+
+    expect(error).toBeDefined();
+    expect(error.message).toBe(
+      'Foreign key "userName" type "STRING" does not match target key "description" type "BIGINT" in belongs to relation "user" of collection "posts"',
+    );
   });
 
   it('association undefined', async () => {
@@ -28,12 +134,16 @@ describe('belongs to field', () => {
         { type: 'belongsTo', name: 'post' },
       ],
     });
+
     expect(Comment.model.associations.post).toBeUndefined();
+
     const Post = db.collection({
       name: 'posts',
       fields: [{ type: 'string', name: 'title' }],
     });
+
     const association = Comment.model.associations.post;
+
     expect(Comment.model.associations.post).toBeDefined();
     expect(association.foreignKey).toBe('postId');
     // @ts-ignore
@@ -59,10 +169,11 @@ describe('belongs to field', () => {
   });
 
   it('custom targetKey and foreignKey', async () => {
-    const Post = db.collection({
+    db.collection({
       name: 'posts',
-      fields: [{ type: 'string', name: 'key', unique: true }],
+      fields: [{ type: 'string', name: 'key' }],
     });
+
     const Comment = db.collection({
       name: 'comments',
       fields: [
@@ -74,12 +185,43 @@ describe('belongs to field', () => {
         },
       ],
     });
+
     const association = Comment.model.associations.post;
     expect(association).toBeDefined();
     expect(association.foreignKey).toBe('postKey');
+
     // @ts-ignore
     expect(association.targetKey).toBe('key');
     expect(Comment.model.rawAttributes['postKey']).toBeDefined();
+  });
+
+  it('should throw error when foreignKey is too long', async () => {
+    const Post = db.collection({
+      name: 'posts',
+      fields: [{ type: 'string', name: 'key', unique: true }],
+    });
+
+    const longForeignKey = 'a'.repeat(128);
+
+    let error;
+
+    try {
+      db.collection({
+        name: 'comments1',
+        fields: [
+          {
+            type: 'belongsTo',
+            name: 'post',
+            targetKey: 'key',
+            foreignKey: longForeignKey,
+          },
+        ],
+      });
+    } catch (e) {
+      error = e;
+    }
+
+    expect(error).toBeInstanceOf(IdentifierError);
   });
 
   it('custom name and target', async () => {
@@ -158,5 +300,108 @@ describe('belongs to field', () => {
     expect(belongsToField).toBeDefined();
     const association = Post.model.associations;
     expect(association['comments']).toBeDefined();
+  });
+
+  describe('foreign constraints', () => {
+    it('should set null on delete', async () => {
+      const Product = db.collection({
+        name: 'products',
+        fields: [{ type: 'string', name: 'name' }],
+      });
+
+      const Order = db.collection({
+        name: 'order',
+        fields: [{ type: 'belongsTo', name: 'product', onDelete: 'SET NULL' }],
+      });
+
+      await db.sync();
+
+      const p = await Product.repository.create({ values: { name: 'p1' } });
+      const o = await Order.repository.create({ values: { product: p.id } });
+
+      expect(o.productId).toBe(p.id);
+
+      await Product.repository.destroy({
+        filterByTk: p.id,
+      });
+
+      const newO = await o.reload();
+
+      expect(newO.productId).toBeNull();
+    });
+
+    it('should delete reference map item when field unbind', async () => {
+      const Product = db.collection({
+        name: 'products',
+        fields: [{ type: 'string', name: 'name' }],
+      });
+
+      const Order = db.collection({
+        name: 'order',
+        fields: [{ type: 'belongsTo', name: 'product', onDelete: 'CASCADE' }],
+      });
+
+      await db.sync();
+
+      Order.removeField('product');
+
+      expect(db.referenceMap.getReferences(Product.name)).toHaveLength(0);
+    });
+
+    it('should delete cascade', async () => {
+      const Product = db.collection({
+        name: 'products',
+        fields: [{ type: 'string', name: 'name' }],
+      });
+
+      const Order = db.collection({
+        name: 'order',
+        fields: [{ type: 'belongsTo', name: 'product', onDelete: 'CASCADE' }],
+      });
+
+      await db.sync();
+      const p = await Product.repository.create({ values: { name: 'p1' } });
+      await Order.repository.create({ values: { product: p.id } });
+      await Order.repository.create({ values: { product: p.id } });
+
+      expect(await Order.repository.count({ filter: { productId: p.id } })).toBe(2);
+
+      await Product.repository.destroy({
+        filterByTk: p.id,
+      });
+
+      expect(await Order.repository.count({ filter: { productId: p.id } })).toBe(0);
+    });
+
+    it('should delete restrict', async () => {
+      const Product = db.collection({
+        name: 'products',
+        fields: [{ type: 'string', name: 'name' }],
+      });
+
+      const Order = db.collection({
+        name: 'order',
+        fields: [{ type: 'belongsTo', name: 'product', onDelete: 'RESTRICT' }],
+      });
+
+      await db.sync();
+
+      const p = await Product.repository.create({ values: { name: 'p1' } });
+      const o = await Order.repository.create({ values: { product: p.id } });
+
+      expect(o.productId).toBe(p.id);
+
+      let error = null;
+
+      try {
+        await Product.repository.destroy({
+          filterByTk: p.id,
+        });
+      } catch (e) {
+        error = e;
+      }
+
+      expect(error).not.toBeNull();
+    });
   });
 });

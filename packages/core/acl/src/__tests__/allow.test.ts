@@ -1,3 +1,13 @@
+/**
+ * This file is part of the NocoBase (R) project.
+ * Copyright (c) 2020-2024 NocoBase Co., Ltd.
+ * Authors: NocoBase Team.
+ *
+ * This project is dual-licensed under AGPL-3.0 and NocoBase Commercial License.
+ * For more information, please refer to: https://www.nocobase.com/agreement.
+ */
+
+import { vi } from 'vitest';
 import { ACL } from '..';
 
 describe('skip', () => {
@@ -21,7 +31,7 @@ describe('skip', () => {
       throw() {},
     };
 
-    const nextFunc = jest.fn();
+    const nextFunc = vi.fn();
 
     await middlewareFunc(ctx, nextFunc);
     expect(nextFunc).toHaveBeenCalledTimes(0);
@@ -40,15 +50,19 @@ describe('skip', () => {
         resourceName: 'users',
         actionName: 'login',
       },
+      log: {
+        info() {},
+      },
       app: {
         acl,
       },
       throw() {},
     };
 
-    const nextFunc = jest.fn();
+    const nextFunc = vi.fn();
 
     let skip = false;
+
     acl.allow('users', 'login', (ctx) => {
       return skip;
     });
@@ -64,7 +78,7 @@ describe('skip', () => {
   it('should skip action with registered condition', async () => {
     const middlewareFunc = acl.middleware();
 
-    const conditionFn = jest.fn();
+    const conditionFn = vi.fn();
     acl.allowManager.registerAllowCondition('superUser', async () => {
       conditionFn();
       return true;
@@ -76,13 +90,16 @@ describe('skip', () => {
         resourceName: 'users',
         actionName: 'login',
       },
+      log: {
+        info() {},
+      },
       app: {
         acl,
       },
       throw() {},
     };
 
-    const nextFunc = jest.fn();
+    const nextFunc = vi.fn();
 
     acl.allow('users', 'login', 'superUser');
 

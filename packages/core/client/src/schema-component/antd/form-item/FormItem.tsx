@@ -1,213 +1,136 @@
-import { css } from '@emotion/css';
-import { FormItem as Item } from '@formily/antd';
+/**
+ * This file is part of the NocoBase (R) project.
+ * Copyright (c) 2020-2024 NocoBase Co., Ltd.
+ * Authors: NocoBase Team.
+ *
+ * This project is dual-licensed under AGPL-3.0 and NocoBase Commercial License.
+ * For more information, please refer to: https://www.nocobase.com/agreement.
+ */
+
+import { css, cx } from '@emotion/css';
+import { IFormItemProps, FormItem as Item } from '@formily/antd-v5';
 import { Field } from '@formily/core';
-import { ISchema, useField, useFieldSchema } from '@formily/react';
-import React from 'react';
-import { useTranslation } from 'react-i18next';
-import { useCompile, useDesignable } from '../..';
-import { useCollection, useCollectionManager } from '../../../collection-manager';
-import { GeneralSchemaDesigner, SchemaSettings } from '../../../schema-settings';
+import { observer, useField, useFieldSchema } from '@formily/react';
+import React, { useEffect, useMemo } from 'react';
+import { ACLCollectionFieldProvider } from '../../../acl/ACLProvider';
+import { useApp } from '../../../application';
+import { useFormActiveFields } from '../../../block-provider/hooks/useFormActiveFields';
+import { Collection_deprecated } from '../../../collection-manager';
+import { CollectionFieldProvider } from '../../../data-source/collection-field/CollectionFieldProvider';
+import { withDynamicSchemaProps } from '../../../hoc/withDynamicSchemaProps';
+import { useDataFormItemProps } from '../../../modules/blocks/data-blocks/form/hooks/useDataFormItemProps';
+import { GeneralSchemaDesigner } from '../../../schema-settings';
 import { BlockItem } from '../block-item';
 import { HTMLEncode } from '../input/shared';
+import { FilterFormDesigner } from './FormItem.FilterFormDesigner';
+import { useEnsureOperatorsValid } from './SchemaSettingOptions';
+import useLazyLoadDisplayAssociationFieldsOfForm from './hooks/useLazyLoadDisplayAssociationFieldsOfForm';
+import { useLinkageRulesForSubTableOrSubForm } from './hooks/useLinkageRulesForSubTableOrSubForm';
+import useParseDefaultValue from './hooks/useParseDefaultValue';
 
-export const FormItem: any = (props) => {
-  const field = useField();
-  return (
-    <BlockItem className={'nb-form-item'}>
-      <Item
-       className={`${css`& .ant-space{
-        flex-wrap:wrap;
-      }`}`}
-        {...props}
-        extra={
-          field.description ? (
-            <div
-              dangerouslySetInnerHTML={{
-                __html: HTMLEncode(field.description).split('\n').join('<br/>'),
+Item.displayName = 'FormilyFormItem';
+
+const formItemWrapCss = css`
+  & .ant-space {
+    flex-wrap: wrap;
+  }
+  .ant-description-textarea img {
+    max-width: 100%;
+  }
+`;
+
+const formItemLabelCss = css`
+  > .ant-formily-item-label {
+    display: none;
+  }
+`;
+
+export const FormItem: any = withDynamicSchemaProps(
+  observer((props: IFormItemProps) => {
+    useEnsureOperatorsValid();
+    const field = useField<Field>();
+    const schema = useFieldSchema();
+    const { addActiveFieldName } = useFormActiveFields() || {};
+    const { wrapperStyle }: { wrapperStyle: any } = useDataFormItemProps();
+
+    useParseDefaultValue();
+    useLazyLoadDisplayAssociationFieldsOfForm();
+    useLinkageRulesForSubTableOrSubForm();
+
+    useEffect(() => {
+      addActiveFieldName?.(schema.name as string);
+    }, [addActiveFieldName, schema.name]);
+
+    const showTitle = schema['x-decorator-props']?.showTitle ?? true;
+    const extra = useMemo(() => {
+      if (field.description && field.description !== '') {
+        return typeof field.description === 'string' ? (
+          <div
+            dangerouslySetInnerHTML={{
+              __html: HTMLEncode(field.description).split('\n').join('<br/>'),
+            }}
+          />
+        ) : (
+          field.description
+        );
+      }
+    }, [field.description]);
+    const className = useMemo(() => {
+      return cx(formItemWrapCss, {
+        [formItemLabelCss]: showTitle === false,
+      });
+    }, [showTitle]);
+
+    // 联动规则中的“隐藏保留值”的效果
+    if (field.data?.hidden) {
+      return null;
+    }
+
+    return (
+      <CollectionFieldProvider allowNull={true}>
+        <BlockItem
+          className={cx(
+            'nb-form-item',
+            css`
+              .ant-formily-item-layout-horizontal .ant-formily-item-control {
+                max-width: ${showTitle === false || schema['x-component'] !== 'CollectionField'
+                  ? '100% !important'
+                  : null};
+              }
+            `,
+          )}
+        >
+          <ACLCollectionFieldProvider>
+            <Item
+              className={className}
+              {...props}
+              extra={extra}
+              wrapperStyle={{
+                ...(wrapperStyle.backgroundColor ? { paddingLeft: '5px', paddingRight: '5px' } : {}),
+                ...wrapperStyle,
               }}
             />
-          ) : null
-        }
-      />
-    </BlockItem>
+          </ACLCollectionFieldProvider>
+        </BlockItem>
+      </CollectionFieldProvider>
+    );
+  }),
+  { displayName: 'FormItem' },
+);
+
+FormItem.Designer = function Designer() {
+  const app = useApp();
+  const fieldSchema = useFieldSchema();
+  const settingsName = `FormItemSettings:${fieldSchema['x-interface']}`;
+  const defaultActionSettings = 'FormItemSettings';
+  const hasFieldItem = app.schemaSettingsManager.has(settingsName);
+  return (
+    <GeneralSchemaDesigner schemaSettings={hasFieldItem ? settingsName : defaultActionSettings}></GeneralSchemaDesigner>
   );
 };
 
-FormItem.Designer = () => {
-  const { getCollectionFields } = useCollectionManager();
-  const { getField } = useCollection();
-  const field = useField<Field>();
-  const fieldSchema = useFieldSchema();
-  const { t } = useTranslation();
-  const { dn, refresh } = useDesignable();
-  const compile = useCompile();
-  const collectionField = getField(fieldSchema['name']);
-  const originalTitle = collectionField?.uiSchema?.title;
-  const targetFields = collectionField?.target ? getCollectionFields(collectionField.target) : [];
-  const initialValue = {
-    title: field.title === originalTitle ? undefined : field.title,
-  };
-  if (!field.readPretty) {
-    initialValue['required'] = field.required;
-  }
-  const options = targetFields
-    .filter((field) => !field?.target && field.type !== 'boolean')
-    .map((field) => ({
-      value: field?.name,
-      label: compile(field?.uiSchema?.title) || field?.name,
-    }));
-  return (
-    <GeneralSchemaDesigner>
-      {collectionField && (
-        <SchemaSettings.ModalItem
-          title={t('Edit field title')}
-          schema={
-            {
-              type: 'object',
-              title: t('Edit field title'),
-              properties: {
-                title: {
-                  title: t('Field title'),
-                  default: field?.title,
-                  description: `${t('Original field title: ')}${collectionField?.uiSchema?.title}`,
-                  'x-decorator': 'FormItem',
-                  'x-component': 'Input',
-                  'x-component-props': {},
-                },
-              },
-            } as ISchema
-          }
-          onSubmit={({ title }) => {
-            if (title) {
-              field.title = title;
-              fieldSchema.title = title;
-              dn.emit('patch', {
-                schema: {
-                  'x-uid': fieldSchema['x-uid'],
-                  title: fieldSchema.title,
-                },
-              });
-            }
-            dn.refresh();
-          }}
-        />
-      )}
-      {!field.readPretty && (
-        <SchemaSettings.ModalItem
-          title={t('Edit description')}
-          schema={
-            {
-              type: 'object',
-              title: t('Edit description'),
-              properties: {
-                description: {
-                  // title: t('Description'),
-                  default: field?.description,
-                  'x-decorator': 'FormItem',
-                  'x-component': 'Input.TextArea',
-                  'x-component-props': {},
-                },
-              },
-            } as ISchema
-          }
-          onSubmit={({ description }) => {
-            field.description = description;
-            fieldSchema.description = description;
-            dn.emit('patch', {
-              schema: {
-                'x-uid': fieldSchema['x-uid'],
-                description: fieldSchema.description,
-              },
-            });
-            dn.refresh();
-          }}
-        />
-      )}
-      {field.readPretty && (
-        <SchemaSettings.ModalItem
-          title={t('Edit tooltip')}
-          schema={
-            {
-              type: 'object',
-              title: t('Edit description'),
-              properties: {
-                tooltip: {
-                  default: fieldSchema?.['x-decorator-props']?.tooltip,
-                  'x-decorator': 'FormItem',
-                  'x-component': 'Input.TextArea',
-                  'x-component-props': {},
-                },
-              },
-            } as ISchema
-          }
-          onSubmit={({ tooltip }) => {
-            field.decoratorProps.tooltip = tooltip;
-            fieldSchema['x-decorator-props'] = fieldSchema['x-decorator-props'] || {};
-            fieldSchema['x-decorator-props']['tooltip'] = tooltip;
-            dn.emit('patch', {
-              schema: {
-                'x-uid': fieldSchema['x-uid'],
-                'x-decorator-props': fieldSchema['x-decorator-props'],
-              },
-            });
-            dn.refresh();
-          }}
-        />
-      )}
-      {!field.readPretty && (
-        <SchemaSettings.SwitchItem
-          title={t('Required')}
-          checked={field.required}
-          onChange={(required) => {
-            const schema = {
-              ['x-uid']: fieldSchema['x-uid'],
-            };
-            field.required = required;
-            fieldSchema['required'] = required;
-            schema['required'] = required;
-            dn.emit('patch', {
-              schema,
-            });
-            refresh();
-          }}
-        />
-      )}
-      {collectionField?.target && (
-        <SchemaSettings.SelectItem
-          title={t('Title field')}
-          options={options}
-          value={field?.componentProps?.fieldNames?.label}
-          onChange={(label) => {
-            const schema = {
-              ['x-uid']: fieldSchema['x-uid'],
-            };
-            const fieldNames = {
-              ...field.componentProps.fieldNames,
-              label,
-            };
-            fieldSchema['x-component-props'] = fieldSchema['x-component-props'] || {};
-            fieldSchema['x-component-props']['fieldNames'] = fieldNames;
-            field.componentProps.fieldNames = fieldNames;
-            schema['x-component-props'] = {
-              fieldNames,
-            };
-            dn.emit('patch', {
-              schema,
-            });
-            dn.refresh();
-          }}
-        />
-      )}
-      {collectionField && <SchemaSettings.Divider />}
-      <SchemaSettings.Remove
-        removeParentsIfNoChildren
-        confirm={{
-          title: t('Delete field')
-        }}
-        breakRemoveOn={{
-          'x-component': 'Grid',
-        }}
-      />
-    </GeneralSchemaDesigner>
-  );
-};
+export function isFileCollection(collection: Collection_deprecated) {
+  return collection?.template === 'file';
+}
+
+FormItem.FilterFormDesigner = FilterFormDesigner;

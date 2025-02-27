@@ -1,7 +1,9 @@
+
+
 /**
  * title: Select
  */
-import { FormItem } from '@formily/antd';
+import { FormItem } from '@formily/antd-v5';
 import { SchemaComponent, SchemaComponentProvider, Select } from '@nocobase/client';
 import React from 'react';
 
@@ -27,7 +29,7 @@ const schema = {
       'x-decorator': 'FormItem',
       'x-component': 'Select',
       'x-component-props': {
-        mode: 'tags',
+        mode: 'multiple',
       },
       enum: dataSource,
       'x-reactions': {

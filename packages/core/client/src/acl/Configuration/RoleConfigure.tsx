@@ -1,31 +1,93 @@
+/**
+ * This file is part of the NocoBase (R) project.
+ * Copyright (c) 2020-2024 NocoBase Co., Ltd.
+ * Authors: NocoBase Team.
+ *
+ * This project is dual-licensed under AGPL-3.0 and NocoBase Commercial License.
+ * For more information, please refer to: https://www.nocobase.com/agreement.
+ */
+
 import { onFieldChange } from '@formily/core';
-import { message } from 'antd';
-import React from 'react';
+import { connect } from '@formily/react';
+import { Checkbox } from 'antd';
+import uniq from 'lodash/uniq';
+import React, { useContext } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAPIClient, useRequest } from '../../api-client';
-import { useRecord } from '../../record-provider';
 import { SchemaComponent } from '../../schema-component';
+import { PermissionContext } from './PermisionProvider';
+
+const SnippetCheckboxGroup = connect((props) => {
+  const { t } = useTranslation();
+  return (
+    <Checkbox.Group
+      style={{
+        width: '100%',
+        display: 'block',
+      }}
+      value={props.value}
+      onChange={(values) => {
+        const snippets = ['ui.*', 'pm', 'pm.*', 'app'];
+        const disallowSnippets = snippets.map((key) => `!${key}`);
+        const value = uniq([...(props.value || []), ...values])
+          .filter((key) => key && !disallowSnippets.includes(key))
+          .map((key) => {
+            if (!snippets.includes(key) || values?.includes(key)) {
+              return key;
+            }
+            return `!${key}`;
+          });
+        for (const key of snippets) {
+          if (!value.includes(key) && !value.includes(`!${key}`)) {
+            value.push(`!${key}`);
+          }
+        }
+        props.onChange(value);
+      }}
+    >
+      <div style={{ marginTop: 16 }}>
+        <Checkbox value="ui.*">{t('Allows to configure interface')}</Checkbox>
+      </div>
+      <div style={{ marginTop: 8 }}>
+        <Checkbox value="pm">{t('Allows to install, activate, disable plugins')}</Checkbox>
+      </div>
+      <div style={{ marginTop: 8 }}>
+        <Checkbox value="pm.*">{t('Allows to configure plugins')}</Checkbox>
+      </div>
+      <div style={{ marginTop: 8 }}>
+        <Checkbox value="app">{t('Allows to clear cache, reboot application')}</Checkbox>
+      </div>
+    </Checkbox.Group>
+  );
+});
 
 export const RoleConfigure = () => {
-  const api = useAPIClient();
-  const record = useRecord();
+  const { update, currentRecord } = useContext(PermissionContext);
   const { t } = useTranslation();
   return (
     <SchemaComponent
+      components={{ SnippetCheckboxGroup }}
       schema={{
         type: 'void',
         name: 'form',
         'x-component': 'Form',
         'x-component-props': {
           useValues: (options) => {
+            const api = useAPIClient();
             return useRequest(
-              {
-                resource: 'roles',
-                action: 'get',
-                params: {
-                  filterByTk: record.name,
-                },
-              },
+              () =>
+                api
+                  .resource('roles')
+                  .get({
+                    filterByTk: currentRecord.name,
+                  })
+                  .then((res) => {
+                    const record = res?.data?.data;
+                    record.snippets?.forEach((key) => {
+                      record[key] = true;
+                    });
+                    return { data: record };
+                  }),
               options,
             );
           },
@@ -34,27 +96,25 @@ export const RoleConfigure = () => {
               if (!form.modified) {
                 return;
               }
-              await api.resource('roles').update({
-                filterByTk: record.name,
-                values: form.values,
-              });
-              message.success(t('Saved successfully'));
+              await update(field, form);
             });
           },
         },
         properties: {
-          allowConfigure: {
+          snippets: {
             title: t('Configure permissions'),
+            type: 'boolean',
             'x-decorator': 'FormItem',
-            'x-component': 'Checkbox',
-            'x-content': t('Allows configuration of the whole system, including UI, collections, permissions, etc.'),
+            'x-component': 'SnippetCheckboxGroup',
           },
-          'strategy.actions': {
-            title: t('Global action permissions'),
-            description: t('All collections use general action permissions by default; permission configured individually will override the default one.'),
-            'x-component': 'StrategyActions',
-            'x-decorator': 'FormItem',
-          },
+          // 'strategy.actions': {
+          //   title: t('Global action permissions'),
+          //   description: t(
+          //     'All collections use general action permissions by default; permission configured individually will override the default one.',
+          //   ),
+          //   'x-component': 'StrategyActions',
+          //   'x-decorator': 'FormItem',
+          // },
           allowNewMenu: {
             title: t('Menu permissions'),
             'x-decorator': 'FormItem',

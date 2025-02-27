@@ -1,15 +1,40 @@
+/**
+ * This file is part of the NocoBase (R) project.
+ * Copyright (c) 2020-2024 NocoBase Co., Ltd.
+ * Authors: NocoBase Team.
+ *
+ * This project is dual-licensed under AGPL-3.0 and NocoBase Commercial License.
+ * For more information, please refer to: https://www.nocobase.com/agreement.
+ */
+
 import { ArrayField, Field } from '@formily/core';
-import { useField } from '@formily/react';
+import { useField, useFieldSchema } from '@formily/react';
 import React, { createContext, useContext, useEffect } from 'react';
 import { APIClient } from '../api-client';
 import { BlockProvider, useBlockRequestContext } from './BlockProvider';
+import { useFormBlockContext } from './FormBlockProvider';
+import { useFormFieldContext } from './FormFieldProvider';
 
+/**
+ * @internal
+ */
 export const TableFieldContext = createContext<any>({});
+TableFieldContext.displayName = 'TableFieldContext';
 
 const InternalTableFieldProvider = (props) => {
-  const { params = {}, showIndex, dragSort } = props;
+  const { params = {}, showIndex, dragSort, fieldName } = props;
   const field = useField();
+  const fieldSchema = useFieldSchema();
   const { resource, service } = useBlockRequestContext();
+
+  const formBlockCtx = useFormBlockContext();
+  const formFieldCtx = useFormFieldContext();
+
+  const fullFieldName = formFieldCtx && formFieldCtx.fieldName ? `${formFieldCtx.fieldName}.${fieldName}` : fieldName;
+
+  if (!formBlockCtx?.updateAssociationValues?.includes(fullFieldName)) {
+    formBlockCtx?.updateAssociationValues?.push(fullFieldName);
+  }
   // if (service.loading) {
   //   return <Spin />;
   // }
@@ -17,6 +42,7 @@ const InternalTableFieldProvider = (props) => {
     <TableFieldContext.Provider
       value={{
         field,
+        fieldSchema,
         service,
         resource,
         params,
@@ -108,18 +134,35 @@ export class TableFieldResource {
   }
 }
 
+/**
+ * @internal
+ */
+export const WithoutTableFieldResource = createContext(null);
+WithoutTableFieldResource.displayName = 'WithoutTableFieldResource';
+
+/**
+ * @internal
+ */
 export const TableFieldProvider = (props) => {
   return (
-    <BlockProvider block={'TableField'} {...props}>
-      <InternalTableFieldProvider {...props} />
-    </BlockProvider>
+    <WithoutTableFieldResource.Provider value={false}>
+      <BlockProvider name="table-field" block={'TableField'} {...props}>
+        <InternalTableFieldProvider {...props} />
+      </BlockProvider>
+    </WithoutTableFieldResource.Provider>
   );
 };
 
+/**
+ * @internal
+ */
 export const useTableFieldContext = () => {
   return useContext(TableFieldContext);
 };
 
+/**
+ * @internal
+ */
 export const useTableFieldProps = () => {
   const field = useField<ArrayField>();
   const ctx = useTableFieldContext();
@@ -129,19 +172,21 @@ export const useTableFieldProps = () => {
       field.data = field.data || {};
       field.data.selectedRowKeys = ctx?.field?.data?.selectedRowKeys;
     }
-  }, [ctx?.service?.loading]);
+  }, [ctx?.field?.data?.selectedRowKeys, ctx?.service?.data?.data, ctx?.service?.loading, field]);
   return {
     size: 'middle',
     loading: ctx?.service?.loading,
     showIndex: ctx.showIndex,
     dragSort: ctx.dragSort,
     pagination: false,
+    required: ctx?.fieldSchema?.parent?.required,
     rowKey: (record: any) => {
       return field.value?.indexOf?.(record);
     },
-    onRowSelectionChange(selectedRowKeys) {
+    onRowSelectionChange(selectedRowKeys, selectedRowData) {
       ctx.field.data = ctx?.field?.data || {};
       ctx.field.data.selectedRowKeys = selectedRowKeys;
+      ctx.field.data.selectedRowData = selectedRowData;
     },
     onChange({ current, pageSize }) {
       ctx.service.run({ page: current, pageSize });

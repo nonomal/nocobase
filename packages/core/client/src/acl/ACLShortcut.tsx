@@ -1,42 +1,32 @@
-import { LockOutlined } from '@ant-design/icons';
+/**
+ * This file is part of the NocoBase (R) project.
+ * Copyright (c) 2020-2024 NocoBase Co., Ltd.
+ * Authors: NocoBase Team.
+ *
+ * This project is dual-licensed under AGPL-3.0 and NocoBase Commercial License.
+ * For more information, please refer to: https://www.nocobase.com/agreement.
+ */
+
 import { ISchema } from '@formily/react';
 import { uid } from '@formily/shared';
-import React, { useState } from 'react';
-import { useTranslation } from 'react-i18next';
-import { PluginManager } from '../plugin-manager';
-import { ActionContext, SchemaComponent } from '../schema-component';
+import { Card } from 'antd';
+import React from 'react';
+import { SchemaComponent } from '../schema-component';
 import * as components from './Configuration';
 
-const schema: ISchema = {
+const schema2: ISchema = {
   type: 'object',
   properties: {
     [uid()]: {
-      'x-component': 'Action.Drawer',
-      type: 'void',
-      title: '{{t("Roles & Permissions")}}',
-      properties: {
-        hello1: {
-          type: 'void',
-          'x-component': 'RoleTable',
-        },
-      },
+      'x-component': 'RoleTable',
     },
   },
 };
 
-export const ACLShortcut = () => {
-  const [visible, setVisible] = useState(false);
-  const { t } = useTranslation();
+export const ACLPane = () => {
   return (
-    <ActionContext.Provider value={{ visible, setVisible }}>
-      <PluginManager.Toolbar.Item
-        icon={<LockOutlined />}
-        title={t('Roles & Permissions')}
-        onClick={() => {
-          setVisible(true);
-        }}
-      />
-      <SchemaComponent components={components} schema={schema} />
-    </ActionContext.Provider>
+    <Card data-testid="acl-pane-card" bordered={false}>
+      <SchemaComponent components={components as any} schema={schema2} />
+    </Card>
   );
 };

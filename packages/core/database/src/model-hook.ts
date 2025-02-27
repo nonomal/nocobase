@@ -1,5 +1,15 @@
+/**
+ * This file is part of the NocoBase (R) project.
+ * Copyright (c) 2020-2024 NocoBase Co., Ltd.
+ * Authors: NocoBase Team.
+ *
+ * This project is dual-licensed under AGPL-3.0 and NocoBase Commercial License.
+ * For more information, please refer to: https://www.nocobase.com/agreement.
+ */
+
 import lodash from 'lodash';
-import type { SequelizeHooks } from 'sequelize/types/lib/hooks';
+import { SequelizeHooks } from 'sequelize/types/hooks';
+
 import Database from './database';
 import { Model } from './model';
 
@@ -7,26 +17,29 @@ const { hooks } = require('sequelize/lib/hooks');
 
 export class ModelHook {
   database: Database;
-  boundEvent = new Set<string>();
+
+  boundEvents = new Set<string>();
 
   constructor(database: Database) {
     this.database = database;
   }
 
-  isModelHook(eventName: string | symbol): keyof SequelizeHooks | false {
-    if (lodash.isString(eventName)) {
-      const hookType = eventName.split('.').pop();
-
-      if (hooks[hookType]) {
-        return <keyof SequelizeHooks>hookType;
-      }
+  match(event: string | symbol): keyof SequelizeHooks | null {
+    // NOTE: skip Symbol event
+    if (!lodash.isString(event)) {
+      return null;
     }
 
-    return false;
+    const type = event.split('.').pop();
+
+    return type in hooks ? <keyof SequelizeHooks>type : null;
   }
 
   findModelName(hookArgs) {
-    for (const arg of hookArgs) {
+    for (let arg of hookArgs) {
+      if (Array.isArray(arg)) {
+        arg = arg[0];
+      }
       if (arg?._previousDataValues) {
         return (<Model>arg).constructor.name;
       }
@@ -34,38 +47,35 @@ export class ModelHook {
         if (arg['model']) {
           return arg['model'].name;
         }
-        const plural = arg?.name?.plural;
-        if (this.database.sequelize.isDefined(plural)) {
-          return plural;
-        }
-        const singular = arg?.name?.singular;
-        if (this.database.sequelize.isDefined(singular)) {
-          return singular;
+
+        const modelName = arg['modelName'];
+        if (this.database.sequelize.isDefined(modelName)) {
+          return modelName;
         }
       }
     }
     return null;
   }
 
-  bindEvent(eventName) {
-    this.boundEvent.add(eventName);
+  bindEvent(type) {
+    this.boundEvents.add(type);
   }
 
-  hasBindEvent(eventName) {
-    return this.boundEvent.has(eventName);
+  hasBoundEvent(type): boolean {
+    return this.boundEvents.has(type);
   }
 
-  sequelizeHookBuilder(eventName) {
+  buildSequelizeHook(type) {
     return async (...args: any[]) => {
       const modelName = this.findModelName(args);
 
       if (modelName) {
         // emit model event
-        await this.database.emitAsync(`${modelName}.${eventName}`, ...args);
+        await this.database.emitAsync(`${modelName}.${type}`, ...args);
       }
 
       // emit sequelize global event
-      await this.database.emitAsync(eventName, ...args);
+      await this.database.emitAsync(type, ...args);
     };
   }
 }

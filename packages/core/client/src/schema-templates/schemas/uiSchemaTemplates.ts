@@ -1,18 +1,57 @@
+/**
+ * This file is part of the NocoBase (R) project.
+ * Copyright (c) 2020-2024 NocoBase Co., Ltd.
+ * Authors: NocoBase Team.
+ *
+ * This project is dual-licensed under AGPL-3.0 and NocoBase Commercial License.
+ * For more information, please refer to: https://www.nocobase.com/agreement.
+ */
+
 import { ISchema } from '@formily/react';
 import { uid } from '@formily/shared';
-import { useUpdateActionProps } from '../../block-provider/hooks';
+import { useBulkDestroyActionProps, useDestroyActionProps, useUpdateActionProps } from '../../block-provider/hooks';
+import { uiSchemaTemplatesCollection } from '../collections/uiSchemaTemplates';
+import { CollectionTitle } from './CollectionTitle';
+import { useBlockRequestContext } from '../../block-provider';
 import { useSchemaTemplateManager } from '../SchemaTemplateManagerProvider';
 
 const useUpdateSchemaTemplateActionProps = () => {
   const props = useUpdateActionProps();
-  const { refresh } = useSchemaTemplateManager();
+  const { __parent } = useBlockRequestContext();
   return {
     async onClick() {
       await props.onClick();
-      refresh();
-    }
-  }
-}
+      __parent?.service?.refresh?.();
+    },
+  };
+};
+
+const useBulkDestroyTemplateProps = () => {
+  const props = useBulkDestroyActionProps();
+  const bm = useSchemaTemplateManager();
+  const { service } = useBlockRequestContext();
+
+  return {
+    async onClick() {
+      await props.onClick();
+      await bm.refresh();
+      service?.refresh?.();
+    },
+  };
+};
+
+const useDestroyTemplateProps = () => {
+  const props = useDestroyActionProps();
+  const { service } = useBlockRequestContext();
+  const bm = useSchemaTemplateManager();
+  return {
+    async onClick() {
+      await props.onClick();
+      await bm.refresh();
+      service?.refresh?.();
+    },
+  };
+};
 
 export const uiSchemaTemplatesSchema: ISchema = {
   type: 'object',
@@ -21,12 +60,12 @@ export const uiSchemaTemplatesSchema: ISchema = {
       type: 'void',
       'x-decorator': 'TableBlockProvider',
       'x-decorator-props': {
-        collection: 'uiSchemaTemplates',
+        collection: uiSchemaTemplatesCollection,
         resource: 'uiSchemaTemplates',
         action: 'list',
         params: {
           pageSize: 20,
-          appends: ['collection'],
+          // appends: ['collection'],
           sort: ['-createdAt'],
         },
         rowKey: 'key',
@@ -48,14 +87,13 @@ export const uiSchemaTemplatesSchema: ISchema = {
               title: '{{ t("Delete") }}',
               'x-action': 'destroy',
               'x-component': 'Action',
-              'x-designer': 'Action.Designer',
+              'x-use-component-props': useBulkDestroyTemplateProps,
               'x-component-props': {
                 icon: 'DeleteOutlined',
                 confirm: {
                   title: "{{t('Delete record')}}",
                   content: "{{t('Are you sure you want to delete it?')}}",
                 },
-                useProps: '{{ useBulkDestroyActionProps }}',
               },
             },
           },
@@ -63,11 +101,11 @@ export const uiSchemaTemplatesSchema: ISchema = {
         [uid()]: {
           type: 'array',
           'x-component': 'TableV2',
+          'x-use-component-props': 'useTableBlockProps',
           'x-component-props': {
             rowSelection: {
               type: 'checkbox',
             },
-            useProps: '{{ useTableBlockProps }}',
           },
           properties: {
             actions: {
@@ -99,6 +137,7 @@ export const uiSchemaTemplatesSchema: ISchema = {
                       'x-component-props': {
                         openMode: 'drawer',
                         icon: 'EditOutlined',
+                        refreshDataBlockRequest: false,
                       },
                       properties: {
                         drawer: {
@@ -114,7 +153,7 @@ export const uiSchemaTemplatesSchema: ISchema = {
                               'x-decorator': 'FormBlockProvider',
                               'x-decorator-props': {
                                 resource: 'uiSchemaTemplates',
-                                collection: 'uiSchemaTemplates',
+                                collection: uiSchemaTemplatesCollection,
                                 action: 'get',
                                 useParams: '{{ useParamsFromRecord }}',
                               },
@@ -123,9 +162,7 @@ export const uiSchemaTemplatesSchema: ISchema = {
                                 [uid()]: {
                                   type: 'void',
                                   'x-component': 'FormV2',
-                                  'x-component-props': {
-                                    useProps: '{{ useFormBlockProps }}',
-                                  },
+                                  'x-use-component-props': 'useFormBlockProps',
                                   properties: {
                                     name: {
                                       type: 'string',
@@ -148,10 +185,10 @@ export const uiSchemaTemplatesSchema: ISchema = {
                                           title: '{{t("Submit")}}',
                                           'x-action': 'submit',
                                           'x-component': 'Action',
+                                          'x-use-component-props': useUpdateSchemaTemplateActionProps,
                                           'x-component-props': {
                                             type: 'primary',
                                             htmlType: 'submit',
-                                            useProps: useUpdateSchemaTemplateActionProps,
                                           },
                                           type: 'void',
                                         },
@@ -169,13 +206,13 @@ export const uiSchemaTemplatesSchema: ISchema = {
                       title: '{{ t("Delete") }}',
                       'x-action': 'destroy',
                       'x-component': 'Action.Link',
+                      'x-use-component-props': useDestroyTemplateProps,
                       'x-component-props': {
                         icon: 'DeleteOutlined',
                         confirm: {
                           title: "{{t('Delete record')}}",
                           content: "{{t('Are you sure you want to delete it?')}}",
                         },
-                        useProps: '{{ useDestroyActionProps }}',
                       },
                     },
                   },
@@ -201,13 +238,11 @@ export const uiSchemaTemplatesSchema: ISchema = {
             column2: {
               type: 'void',
               title: '{{t("Collection display name")}}',
-              'x-decorator': 'TableV2.Column.Decorator',
               'x-component': 'TableV2.Column',
               properties: {
                 'collection.title': {
                   type: 'string',
-                  'x-collection-field': 'uiSchemaTemplates.collection',
-                  'x-component': 'Input',
+                  'x-component': CollectionTitle,
                   'x-read-pretty': true,
                   'x-component-props': {
                     ellipsis: true,
